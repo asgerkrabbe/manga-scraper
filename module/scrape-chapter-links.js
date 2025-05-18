@@ -21,9 +21,19 @@ if (!mangaUrl) {
       .map(a => a.href)
   );
 
-  const uniqueLinks = [...new Set(links)].reverse();
-  fs.writeFileSync('chapters.txt', uniqueLinks.join('\n'));
-  console.log(`Saved ${uniqueLinks.length} chapter links to chapters.txt`);
+  // Sort links by chapter number (numerically)
+  const sortedLinks = [...new Set(links)].sort((a, b) => {
+    const getChapterNum = href => {
+      const match = href.match(/ch_(\d+)/i);
+      return match ? parseInt(match[1], 10) : 0;
+    };
+    return getChapterNum(a) - getChapterNum(b);
+  }).map(link =>
+    link.includes('?') ? `${link}&load=2` : `${link}?load=2`
+  );
+
+  fs.writeFileSync('chapters.txt', sortedLinks.join('\n'));
+  console.log(`Saved ${sortedLinks.length} chapter links to chapters.txt`);
 
   await browser.close();
 })();
