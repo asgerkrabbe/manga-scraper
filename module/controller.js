@@ -61,22 +61,12 @@ const downloadImage = async (url, filepath) => {
         });
       });
 
-      // Wait for images to load
-      await page.waitForSelector('img[src]', { timeout: 10000 });
+      // Wait for at least one manga image to load inside the image-items container
+      await page.waitForSelector('div[name="image-items"] img', { timeout: 30000 });
 
-      // Extract image URLs, excluding those inside divs with name="comment-post"
-      const imgUrls = await page.$$eval('img', imgs =>
+      // Extract image URLs only from the manga image container
+      const imgUrls = await page.$$eval('div[name="image-items"] img', imgs =>
         imgs
-          .filter(img => {
-            let parent = img.parentElement;
-            while (parent) {
-              if (parent.getAttribute && parent.getAttribute('name') === 'comment-post') {
-                return false; // Exclude images inside comment-post divs
-              }
-              parent = parent.parentElement;
-            }
-            return true;
-          })
           .map(img => img.getAttribute('src'))
           .filter(src => src && (src.endsWith('.jpg') || src.endsWith('.jpeg') || src.endsWith('.png')))
       );

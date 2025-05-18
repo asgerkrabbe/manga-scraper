@@ -9,7 +9,7 @@ if (!mangaUrl) {
 }
 
 (async () => {
-  const browser = await chromium.launch({ headless: false });
+  const browser = await chromium.launch({ headless: true }); // Use headless mode to reduce detection
   const page = await browser.newPage();
   console.log(`Navigating to ${mangaUrl}`);
   await page.goto(mangaUrl, { waitUntil: 'networkidle' });
