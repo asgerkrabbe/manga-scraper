@@ -4,6 +4,7 @@
     "jsdom": "^26.1.0",
     "node-fetch": "^2.6.7",
     "pdf-lib": "^1.17.1",
-    "playwright": "^1.43.1"
+    "playwright": "^1.43.1",
+    "sharp": "^0.34.1"
   }
 }

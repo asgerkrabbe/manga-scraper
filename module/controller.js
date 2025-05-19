@@ -4,6 +4,7 @@ import path from 'path';
 import { chromium } from 'playwright';
 import fetch from 'node-fetch';
 import { PDFDocument } from 'pdf-lib';
+import sharp from 'sharp';
 
 const chapterListPath = 'chapters.txt';
 const outputBase = 'chapters';
@@ -20,15 +21,6 @@ const downloadImage = async (url, filepath) => {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Failed to download ${url}`);
     const buffer = await res.buffer();
-
-    // Validate if the file is a JPEG or PNG
-    const isJpeg = buffer.slice(0, 2).equals(Buffer.from([0xff, 0xd8])); // JPEG magic number
-    const isPng = buffer.slice(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])); // PNG magic number
-
-    if (!isJpeg && !isPng) {
-      throw new Error(`Invalid image file: ${url}`);
-    }
-
     fs.writeFileSync(filepath, buffer);
   } catch (error) {
     console.error(`Error downloading image: ${error.message}`);
@@ -64,11 +56,17 @@ const downloadImage = async (url, filepath) => {
       // Wait for at least one manga image to load inside the image-items container
       await page.waitForSelector('div[name="image-items"] img', { timeout: 30000 });
 
-      // Extract image URLs only from the manga image container
+      // Extract image URLs only from the manga image container, now including .webp
       const imgUrls = await page.$$eval('div[name="image-items"] img', imgs =>
         imgs
           .map(img => img.getAttribute('src'))
-          .filter(src => src && (src.endsWith('.jpg') || src.endsWith('.jpeg') || src.endsWith('.png')))
+          .filter(src =>
+            src &&
+            (src.endsWith('.jpg') ||
+             src.endsWith('.jpeg') ||
+             src.endsWith('.png') ||
+             src.endsWith('.webp'))
+          )
       );
 
       console.log(`Found ${imgUrls.length} images.`);
@@ -84,17 +82,26 @@ const downloadImage = async (url, filepath) => {
 
       for (let j = 0; j < imgUrls.length; j++) {
         const imgUrl = imgUrls[j];
-        const imgPath = path.join(chapterDir, `page_${j + 1}.${imgUrl.endsWith('.png') ? 'png' : 'jpg'}`);
+        let ext = 'jpg';
+        if (imgUrl.endsWith('.png')) ext = 'png';
+        else if (imgUrl.endsWith('.webp')) ext = 'webp';
+        const imgPath = path.join(chapterDir, `page_${j + 1}.${ext}`);
         console.log(`Downloading image ${j + 1}`);
         await downloadImage(imgUrl, imgPath);
 
         try {
-          const imgBytes = fs.readFileSync(imgPath);
+          let imgBytes;
           let image;
-          if (imgUrl.endsWith('.png')) {
-            image = await pdfDoc.embedPng(imgBytes); // Embed PNG
+          if (ext === 'webp') {
+            // Convert webp to png in memory
+            const pngBuffer = await sharp(imgPath).png().toBuffer();
+            image = await pdfDoc.embedPng(pngBuffer);
+          } else if (ext === 'png') {
+            imgBytes = fs.readFileSync(imgPath);
+            image = await pdfDoc.embedPng(imgBytes);
           } else {
-            image = await pdfDoc.embedJpg(imgBytes); // Embed JPEG
+            imgBytes = fs.readFileSync(imgPath);
+            image = await pdfDoc.embedJpg(imgBytes);
           }
           const page = pdfDoc.addPage([image.width, image.height]);
           page.drawImage(image, { x: 0, y: 0, width: image.width, height: image.height });
