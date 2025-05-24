@@ -54,14 +54,14 @@ function sanitizeFilename(name) {
     let success = false;
     while (attempts < 2 && !success) {
       attempts++;
-      console.log(`\nProcessing Chapter ${i + 1}: ${url} (Attempt ${attempts})`);
+      // Ensure a new line before starting a new chapter section
+      process.stdout.write('\n');
+      console.log(`Processing Chapter ${i + 1}: ${url} (Attempt ${attempts})`);
       try {
         await page.goto(url, { waitUntil: 'domcontentloaded' });
 
-        // Get chapter title from <title> tag
-        let chapterTitle = await page.title();
-        if (!chapterTitle) chapterTitle = `chapter_${i + 1}`;
-        const safeTitle = sanitizeFilename(chapterTitle);
+        const chapterDir = path.join(outputBase, `chapter_${i + 1}`);
+        fs.mkdirSync(chapterDir, { recursive: true });
 
         // Scroll through the page to trigger lazy loading
         await page.evaluate(async () => {
@@ -102,9 +102,6 @@ function sanitizeFilename(name) {
           continue;
         }
 
-        const chapterDir = path.join(outputBase, `chapter_${i + 1}_${safeTitle}`);
-        fs.mkdirSync(chapterDir, { recursive: true });
-
         const pdfDoc = await PDFDocument.create();
 
         for (let j = 0; j < imgUrls.length; j++) {
@@ -113,14 +110,16 @@ function sanitizeFilename(name) {
           if (imgUrl.endsWith('.png')) ext = 'png';
           else if (imgUrl.endsWith('.webp')) ext = 'webp';
           const imgPath = path.join(chapterDir, `page_${j + 1}.${ext}`);
-          console.log(`Downloading image ${j + 1}`);
+
+          // Only one line for image download progress:
+          process.stdout.write(`\rDownloading image ${j + 1} of ${imgUrls.length}...`);
+
           await downloadImage(imgUrl, imgPath);
 
           try {
             let imgBytes;
             let image;
             if (ext === 'webp') {
-              // Convert webp to png in memory
               const pngBuffer = await sharp(imgPath).png().toBuffer();
               image = await pdfDoc.embedPng(pngBuffer);
             } else if (ext === 'png') {
@@ -133,16 +132,22 @@ function sanitizeFilename(name) {
             const page = pdfDoc.addPage([image.width, image.height]);
             page.drawImage(image, { x: 0, y: 0, width: image.width, height: image.height });
           } catch (error) {
+            process.stdout.write('\n');
             console.error(`Error embedding image ${j + 1} into PDF: ${error.message}`);
           }
         }
 
+        // Print a newline after all images are downloaded for this chapter
+        process.stdout.write('\n');
+
+        // Save PDF and log after pdfPath is defined
         const pdfBytes = await pdfDoc.save();
-        const pdfPath = path.join(pdfOutput, `chapter_${i + 1}_${safeTitle}.pdf`);
+        const pdfPath = path.join(pdfOutput, `chapter_${i + 1}.pdf`);
         fs.writeFileSync(pdfPath, pdfBytes);
-        console.log(`PDF saved to ${pdfPath}`);
+        process.stdout.write(`\rPDF saved to ${pdfPath}                                  `);
         success = true;
       } catch (error) {
+        process.stdout.write('\n');
         console.error(`Error processing Chapter ${i + 1} (Attempt ${attempts}): ${error.message}`);
         if (attempts >= 2) {
           console.error(`Failed Chapter ${i + 1} after 2 attempts. Skipping...`);
