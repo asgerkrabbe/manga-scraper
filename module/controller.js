@@ -60,8 +60,28 @@ function sanitizeFilename(name) {
       try {
         await page.goto(url, { waitUntil: 'domcontentloaded' });
 
-        const chapterDir = path.join(outputBase, `chapter_${i + 1}`);
+        // Extract chapter name and title from the link section
+        const chapterInfo = await page.$eval('a.link-primary.link-hover', el => {
+          const spans = el.querySelectorAll('span');
+          const chapterName = spans[0]?.innerText.trim() || '';
+          const chapterTitle = spans[1]?.innerText.trim() || '';
+          return { chapterName, chapterTitle };
+        });
+
+        // Sanitize for filenames
+        function sanitize(str) {
+          return str.replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, '_').slice(0, 80);
+        }
+        const chapterLabel = [
+          chapterInfo.chapterName,
+          chapterInfo.chapterTitle ? '-' : '',
+          chapterInfo.chapterTitle
+        ].join('');
+
+        // Use this for directory and PDF name
+        const chapterDir = path.join(outputBase, sanitize(chapterLabel) || `chapter_${i + 1}`);
         fs.mkdirSync(chapterDir, { recursive: true });
+        const pdfPath = path.join(pdfOutput, `${sanitize(chapterLabel) || `chapter_${i + 1}`}.pdf`);
 
         // Scroll through the page to trigger lazy loading
         await page.evaluate(async () => {
@@ -142,7 +162,6 @@ function sanitizeFilename(name) {
 
         // Save PDF and log after pdfPath is defined
         const pdfBytes = await pdfDoc.save();
-        const pdfPath = path.join(pdfOutput, `chapter_${i + 1}.pdf`);
         fs.writeFileSync(pdfPath, pdfBytes);
         process.stdout.write(`\rPDF saved to ${pdfPath}                                  `);
         success = true;
